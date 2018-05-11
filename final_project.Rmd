@@ -1,0 +1,147 @@
+---
+title: "Final project"
+author: "Ruijie Ma"
+date: "2018/5/6"
+output: pdf_document
+runtime: shiny
+---
+## datacleaning
+##In this project, I have used skills that I learnt from this class including tidyverse,ggplot,shinny app.I follows the guideline that using real time data to do analyzation. My topic is about effect that governmental regulation towards the price of Bitcoin which is a digital currency. I choose to use the api from Alphavantage which is a set of real time data including open price, daily high and low and volume and these factors can be found in the shinny sidebar.about the Bitcoin's price in both USD and CNY. I delete the part of USD since double currency would make the scale of the graph chaotic. I choose to analyze with CNY because it has relatively lower value of exchange rate which make the change more obvious on the graph. I consider that the governmental regulation does influence the price of Bitcoin and my study confirms this point. We will see the change of South Korean's regulation towards Bitcoin in this year in the graph that creates a lowest open price of Bitcoins in recent two years.This R project shows only the data cleanning part and others are showed in the shinny app.
+```{r, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+library(shiny)
+library(ggplot2)
+library(tidyverse)
+library(shinythemes)
+library(shinydashboard)
+library(curl)
+library(jsonlite)
+
+url<-'https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_DAILY&symbol=BTC&market=CNY&apikey=7UZIED5JPZSAQMPT'
+
+data1 <- read_json(url,format="jsonl")
+
+thedata<-lapply(data1$`Time Series (Digital Currency Daily)`,unlist)
+
+thedata<-as.data.frame(thedata)
+
+thedata<-t(thedata)
+
+thedata<-thedata[,-c(2,4,6,8,10)]
+
+col_names<-colnames(thedata)
+
+col_names<-unlist(lapply(col_names,function(x){
+  temp<-unlist(strsplit(x,"[.]"))
+  temp[2]
+}))
+
+col_names<-gsub(" ","",col_names)
+
+col_names<-gsub("[(]","_",col_names)
+
+col_names<-gsub("[)]","",col_names)
+
+time<-rownames(thedata)
+
+time<-gsub("X","",time)
+
+time<-as.Date(gsub("[.]","-",time),format="%Y-%m-%d")
+mydata<-data.frame(thedata)
+
+names(mydata)<-col_names
+
+mydata$time<-time
+
+mydata[,1:5]<-apply(mydata[,1:5],1,as.numeric)
+
+```
+### ui part
+
+```{r, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+ui <- fluidPage(theme = shinytheme("united"),
+                titlePanel("Bitcoin price"),
+                
+                navbarPage(
+                  # theme = "cerulean",  # <--- To use a theme, uncomment this
+                  "Myapp",
+                  tabPanel("Part1",
+                           sidebarPanel(
+                             selectInput("var", 
+                                         label = "Choose the varaible to display",
+                                         choices = "",
+                                         selected = ""),
+                             sliderInput("range", "Time interval:",min =as.Date("2014-04-01"), 
+                                         max = as.Date("2018-05-02"), value =c(as.Date("2018-03-02"),as.Date("2018-05-02")))),
+                           mainPanel(
+                             tabsetPanel(type = "tabs",
+                                         tabPanel("interval", plotOutput("plot_11"),h4(' In this project, I have used skills that I learnt from this class including tidyverse,ggplot,shinny app.The graoh shows my study of digital currency, the Bitcoin.In my study, I focus on the influence of government regulation on Bitcoin price. I consider that government regulation would influence the price of Bitcoin. I use the API from Alphavantage which is an api about information of Bitcoin price in CNY, the Chinese RMB. To confirm my opinion, my example is about South Korean???s regulation in 2018. The South Korean announce in January that they have closed two of the biggest digital currency exchange and they would prohibit the trade of digital currency in their county in the future. As we can observe from my graph which has price of bitcoin on the Y axis and data on the X axis.You can observe this change when you set the time scale between 2017-01-01 to now. The open price of Bitcoin breaks its prior bottom and it got a new low. Therefore I confirm that the regulation of government has influence on the price of Bitcoins.'))
+                             ))
+                  )
+                )
+)
+
+```
+
+### server part of shinny
+
+```{r, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+url<-'https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_DAILY&symbol=BTC&market=CNY&apikey=7UZIED5JPZSAQMPT'
+data1 <- read_json(url,format="jsonl")
+
+thedata<-lapply(data1$`Time Series (Digital Currency Daily)`,unlist)
+thedata<-as.data.frame(thedata)
+thedata<-t(thedata)
+thedata<-thedata[,-c(2,4,6,8,10)]
+col_names<-colnames(thedata)
+col_names<-unlist(lapply(col_names,function(x){
+  temp<-unlist(strsplit(x,"[.]"))
+  temp[2]
+}))
+col_names<-gsub(" ","",col_names)
+col_names<-gsub("[(]","_",col_names)
+col_names<-gsub("[)]","",col_names)
+time<-rownames(thedata)
+time<-gsub("X","",time)
+time<-as.Date(gsub("[.]","-",time),format="%Y-%m-%d")
+mydata<-data.frame(thedata)
+names(mydata)<-col_names
+mydata$time<-time
+mydata[,1:5]<-apply(mydata[,1:5],1,as.numeric)
+
+server <- function(input, output,session) {
+  
+  
+  updateSliderInput(session,"range", "Time interval:",min =time[length(time)], 
+                    max =time[1], value = c(time[50],time[1]))
+  
+  updateSelectInput(session, "var", 
+                    label = "Choose the varaible to display",
+                    choices = col_names,
+                    selected = "open_CNY")
+  
+  thedata<-reactive({
+    date1<-input$range[1]
+    date2<-input$range[2]
+    select_col<-input$var
+    temp<-subset(mydata,mydata$time>=date1&mydata$time<=date2)
+    temp
+  })
+  
+  output$plot_11<-renderPlot({
+    if(!is.null(thedata())){
+      ggplot(thedata(),aes_string(x='time',y=input$var))+geom_line()
+    }
+  })
+}
+```
+### run shinny app
+```{r, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+shinyApp(ui = ui, server = server)
+```
+
+
